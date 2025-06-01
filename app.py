@@ -3,22 +3,23 @@ from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import MessageEvent, ImageMessage, TextSendMessage
 import os
-import openai
+import json
+import requests
+from io import BytesIO
+from PIL import Image, ImageEnhance
 from google.cloud import vision
 from google.oauth2 import service_account
-from io import BytesIO
-import requests
-from PIL import Image, ImageEnhance
-import json
+import openai
 
+# Flaskアプリ
 app = Flask(__name__)
 
 # LINE Bot設定
 line_bot_api = LineBotApi(os.getenv("CHANNEL_ACCESS_TOKEN"))
 handler = WebhookHandler(os.getenv("CHANNEL_SECRET"))
 
-# OpenAI APIキー
-openai.api_key = os.getenv("OPENAI_API_KEY")
+# OpenAIクライアント（openai>=1.0.0）
+client = openai.OpenAI()
 
 # Google Cloud Vision API 認証（Renderの環境変数から）
 credentials_info = json.loads(os.environ["GOOGLE_APPLICATION_CREDENTIALS_JSON"])
@@ -91,11 +92,11 @@ def handle_image(event):
 {extracted_text}
 --- 問題文ここまで ---
 """
-        gpt_response = openai.ChatCompletion.create(
+        gpt_response = client.chat.completions.create(
             model="gpt-4",
             messages=[{"role": "user", "content": prompt}]
         )
-        reply_text = gpt_response["choices"][0]["message"]["content"].strip()
+        reply_text = gpt_response.choices[0].message.content.strip()
         print(">>> GPT返答：", reply_text)
 
     except Exception as e:
