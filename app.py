@@ -10,6 +10,7 @@ from PIL import Image, ImageEnhance
 from google.cloud import vision
 from google.oauth2 import service_account
 import openai
+from openai import OpenAI
 
 # Flaskアプリ
 app = Flask(__name__)
@@ -19,7 +20,7 @@ line_bot_api = LineBotApi(os.getenv("CHANNEL_ACCESS_TOKEN"))
 handler = WebhookHandler(os.getenv("CHANNEL_SECRET"))
 
 # OpenAIクライアント（openai>=1.0.0）
-client = openai.OpenAI()
+client = OpenAI()
 
 # Google Cloud Vision API 認証（Renderの環境変数から）
 credentials_info = json.loads(os.environ["GOOGLE_APPLICATION_CREDENTIALS_JSON"])
