@@ -1,13 +1,17 @@
 from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
-from linebot.models import MessageEvent, ImageMessage, TextSendMessage
+from linebot.models import MessageEvent, ImageMessage, TextSendMessage, ImageSendMessage
 import os
 import requests
 from io import BytesIO
 import base64
 from openai import OpenAI
-import re
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
+from matplotlib import rcParams
+import japanize_matplotlib  # 日本語フォント対応
+import textwrap
 
 # Flaskアプリ
 app = Flask(__name__)
@@ -19,143 +23,129 @@ handler = WebhookHandler(os.getenv("CHANNEL_SECRET"))
 # OpenAIクライアント
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# LaTeX変換辞書（中高数学でよく使う記法）
-LATEX_CONVERSIONS = {
-    # 基本的な数学記号
-    r'\times': '×',
-    r'\div': '÷',
-    r'\pm': '±',
-    r'\mp': '∓',
-    r'\neq': '≠',
-    r'\leq': '≦',
-    r'\geq': '≧',
-    r'\ll': '≪',
-    r'\gg': '≫',
-    r'\approx': '≈',
-    r'\equiv': '≡',
-    r'\sim': '∼',
-    r'\propto': '∝',
-    r'\infty': '∞',
-    r'\partial': '∂',
-    r'\nabla': '∇',
-    
-    # 集合記号
-    r'\in': '∈',
-    r'\notin': '∉',
-    r'\subset': '⊂',
-    r'\supset': '⊃',
-    r'\subseteq': '⊆',
-    r'\supseteq': '⊇',
-    r'\cup': '∪',
-    r'\cap': '∩',
-    r'\emptyset': '∅',
-    
-    # 論理記号
-    r'\forall': '∀',
-    r'\exists': '∃',
-    r'\neg': '¬',
-    r'\land': '∧',
-    r'\lor': '∨',
-    r'\Rightarrow': '⇒',
-    r'\Leftrightarrow': '⇔',
-    r'\therefore': '∴',
-    r'\because': '∵',
-    
-    # ギリシャ文字（よく使うもの）
-    r'\alpha': 'α',
-    r'\beta': 'β',
-    r'\gamma': 'γ',
-    r'\delta': 'δ',
-    r'\epsilon': 'ε',
-    r'\theta': 'θ',
-    r'\lambda': 'λ',
-    r'\mu': 'μ',
-    r'\pi': 'π',
-    r'\sigma': 'σ',
-    r'\tau': 'τ',
-    r'\phi': 'φ',
-    r'\omega': 'ω',
-    r'\Delta': 'Δ',
-    r'\Sigma': 'Σ',
-    r'\Pi': 'Π',
-    r'\Omega': 'Ω',
-    
-    # 矢印
-    r'\rightarrow': '→',
-    r'\leftarrow': '←',
-    r'\leftrightarrow': '↔',
-    r'\uparrow': '↑',
-    r'\downarrow': '↓',
-    
-    # その他
-    r'\cdot': '・',
-    r'\ldots': '…',
-    r'\cdots': '⋯',
-    r'\angle': '∠',
-    r'\perp': '⊥',
-    r'\parallel': '∥',
-    r'\triangle': '△',
-    r'\square': '□',
-    r'\circ': '○',
-    r'\bullet': '•',
-    r'\star': '★',
-}
+# matplotlib設定
+rcParams['font.size'] = 12
+rcParams['axes.unicode_minus'] = False
 
-def convert_latex_to_readable(text):
-    """LaTeX記法を読みやすい日本語表記に変換"""
-    # 基本的な記号の置換
-    for latex, unicode_char in LATEX_CONVERSIONS.items():
-        text = text.replace(latex, unicode_char)
+def create_explanation_image(text, filename="explanation.png"):
+    """解説テキストを画像に変換（シンプルな白黒デザイン）"""
+    # フォント設定
+    plt.rcParams['font.family'] = 'sans-serif'
+    plt.rcParams['font.size'] = 12
     
-    # 分数の変換: \frac{a}{b} → (a)/(b)
-    text = re.sub(r'\\frac\{([^}]+)\}\{([^}]+)\}', r'(\1)/(\2)', text)
+    # 画像サイズを最適化（縦は内容に応じて動的に調整）
+    fig, ax = plt.subplots(figsize=(8, 10), facecolor='white')
+    ax.axis('off')
     
-    # 平方根の変換: \sqrt{x} → √(x)
-    text = re.sub(r'\\sqrt\{([^}]+)\}', r'√(\1)', text)
+    # テキストを処理
+    lines = text.split('\n')
+    y_position = 0.98
+    line_height = 0.025
     
-    # 累乗の変換: x^{n} → x^n, x^2 → x²
-    text = re.sub(r'\^{([^}]+)}', r'^\1', text)
-    text = text.replace('^2', '²').replace('^3', '³')
+    for line in lines:
+        if line.strip() == '':
+            y_position -= line_height * 0.5
+            continue
+            
+        # 見出しの判定
+        if line.startswith('【') and line.endswith('】'):
+            # 見出しは太字で少し大きく
+            ax.text(0.05, y_position, line, 
+                   fontsize=14, fontweight='bold', 
+                   transform=ax.transAxes, 
+                   verticalalignment='top',
+                   color='black')
+            y_position -= line_height * 1.5
+            
+        elif line.startswith('📝') or line.startswith('💡') or line.startswith('⚠️') or line.startswith('✅'):
+            # 重要ポイント（絵文字付き）
+            wrapped_lines = textwrap.wrap(line, width=50)
+            for wrapped_line in wrapped_lines:
+                ax.text(0.05, y_position, wrapped_line, 
+                       fontsize=12, 
+                       transform=ax.transAxes, 
+                       verticalalignment='top',
+                       color='black')
+                y_position -= line_height
+            y_position -= line_height * 0.3
+            
+        elif line.startswith('*') or line.startswith('•') or line.startswith('・'):
+            # 箇条書き
+            clean_line = line.lstrip('*•・ ')
+            wrapped_lines = textwrap.wrap('  • ' + clean_line, width=48)
+            for wrapped_line in wrapped_lines:
+                ax.text(0.05, y_position, wrapped_line, 
+                       fontsize=11, 
+                       transform=ax.transAxes, 
+                       verticalalignment='top',
+                       color='black')
+                y_position -= line_height
+                
+        elif '＝' in line or '=' in line or '→' in line:
+            # 数式や計算式（インデントして目立たせる）
+            ax.text(0.1, y_position, line.strip(), 
+                   fontsize=12, 
+                   transform=ax.transAxes, 
+                   verticalalignment='top',
+                   color='black',
+                   fontfamily='monospace')  # 等幅フォント
+            y_position -= line_height * 1.3
+            
+        else:
+            # 通常のテキスト
+            wrapped_lines = textwrap.wrap(line, width=52)
+            for wrapped_line in wrapped_lines:
+                ax.text(0.05, y_position, wrapped_line, 
+                       fontsize=11, 
+                       transform=ax.transAxes, 
+                       verticalalignment='top',
+                       color='black')
+                y_position -= line_height
+        
+        # ページの下端に達した場合の処理
+        if y_position < 0.05:
+            break
     
-    # 下付き文字の変換: x_{n} → x_n
-    text = re.sub(r'_{([^}]+)}', r'_\1', text)
+    # シンプルな黒枠
+    rect = patches.Rectangle((0.02, 0.02), 0.96, 0.96, 
+                           linewidth=1, edgecolor='black', 
+                           facecolor='none', transform=ax.transAxes)
+    ax.add_patch(rect)
     
-    # 三角関数・対数関数などの変換
-    functions = ['sin', 'cos', 'tan', 'log', 'ln', 'exp', 'lim', 'max', 'min']
-    for func in functions:
-        text = text.replace(f'\\{func}', func)
+    # 画像を保存（品質とサイズのバランスを最適化）
+    plt.tight_layout()
+    buffer = BytesIO()
+    plt.savefig(buffer, format='png', dpi=100, bbox_inches='tight', 
+                facecolor='white', edgecolor='none')
+    buffer.seek(0)
+    plt.close()
     
-    # 行列の簡略化: \begin{pmatrix}...\end{pmatrix} → [...]
-    text = re.sub(r'\\begin\{pmatrix\}(.*?)\\end\{pmatrix\}', r'[\1]', text, flags=re.DOTALL)
-    text = re.sub(r'\\begin\{bmatrix\}(.*?)\\end\{bmatrix\}', r'[\1]', text, flags=re.DOTALL)
+    return buffer
+
+def upload_image_to_imgur(image_buffer):
+    """画像をImgurにアップロードしてURLを取得"""
+    imgur_client_id = os.getenv("IMGUR_CLIENT_ID")
+    if not imgur_client_id:
+        print(">>> IMGUR_CLIENT_IDが設定されていません")
+        return None
     
-    # ベクトルの変換: \vec{a} → a→
-    text = re.sub(r'\\vec\{([^}]+)\}', r'\1→', text)
+    headers = {'Authorization': f'Client-ID {imgur_client_id}'}
     
-    # 積分記号の簡略化: \int → ∫
-    text = text.replace(r'\int', '∫')
+    image_buffer.seek(0)
+    image_data = base64.b64encode(image_buffer.read()).decode()
     
-    # 総和記号の簡略化: \sum → Σ
-    text = text.replace(r'\sum', 'Σ')
+    response = requests.post(
+        'https://api.imgur.com/3/image',
+        headers=headers,
+        data={'image': image_data, 'type': 'base64'}
+    )
     
-    # 数式環境の削除
-    text = re.sub(r'\$\$([^$]+)\$\$', r'\1', text)
-    text = re.sub(r'\$([^$]+)\$', r'\1', text)
-    text = re.sub(r'\\begin\{equation\}(.*?)\\end\{equation\}', r'\1', text, flags=re.DOTALL)
-    text = re.sub(r'\\begin\{align\}(.*?)\\end\{align\}', r'\1', text, flags=re.DOTALL)
-    
-    # 改行コマンドの変換
-    text = text.replace(r'\\\\', '\n')
-    text = text.replace(r'\n\n\n', '\n\n')  # 連続改行の調整
-    
-    # 不要なバックスラッシュの削除
-    text = re.sub(r'\\([a-zA-Z]+)', r'\1', text)
-    
-    # スペースの調整
-    text = re.sub(r'\s+', ' ', text)
-    text = text.strip()
-    
-    return text
+    if response.status_code == 200:
+        data = response.json()
+        return data['data']['link']
+    else:
+        print(f">>> Imgurアップロードエラー: {response.status_code}")
+        return None
 
 @app.route("/callback", methods=['POST'])
 def callback():
@@ -220,6 +210,15 @@ def handle_image(event):
   * 英文の構造分析（長文読解の場合）
   * 覚えておくべきポイントを整理
 
+【表記ルール】
+- 数式は分かりやすく日本語も交えて説明する
+- 分数は「分子/分母」の形で表記（例：3/4）
+- 累乗は「^」を使用（例：x^2はxの2乗）
+- ルートは「√」を使用（例：√2）
+- 複雑な式は段階的に分解して説明
+- 専門用語は必要最小限にして、使う場合は説明を加える
+- 重要なポイントには絵文字を使用（💡ヒント、📝ポイント、⚠️注意、✅確認）
+
 【注意事項】
 - 直接的な答えは示さない
 - 学習者が自分で考えて解けるよう導く
@@ -227,16 +226,11 @@ def handle_image(event):
 - 分かりやすく、励ましの言葉も含める
 - 問題が読み取れない場合は、より鮮明な画像を求める
 
-【数式の表記について】
-- 数式はLaTeX記法を使用して正確に表現してください
-- 例: 分数は\frac{a}{b}、平方根は\sqrt{x}、累乗はx^{n}のように記述
-
 まず画像の内容を詳しく分析し、問題文を正確に読み取ってから指導を開始してください。
 """
 
-        # temperatureを少し下げて、より一貫性のある回答を生成
         gpt_response = client.chat.completions.create(
-            model="gpt-4o",
+            model="gpt-4o-mini",  # コスト最適化のためminiモデルを使用
             messages=[
                 {
                     "role": "user",
@@ -249,22 +243,47 @@ def handle_image(event):
                             "type": "image_url",
                             "image_url": {
                                 "url": f"data:image/jpeg;base64,{base64_image}",
-                                "detail": "high"
+                                "detail": "low"  # コスト削減のため低解像度モードを使用
                             }
                         }
                     ]
                 }
             ],
-            max_tokens=1500,
-            temperature=0.5  # より一貫性のある回答のため温度を下げる
+            max_tokens=1000,  # トークン数を適切に制限
+            temperature=0.7
         )
         
-        reply_text = gpt_response.choices[0].message.content.strip()
-        print(">>> GPT Vision返答（変換前）：", reply_text[:200] + "...")
+        explanation_text = gpt_response.choices[0].message.content.strip()
+        print(">>> GPT Vision返答：", explanation_text[:200] + "...")
+
+        # 解説画像を生成
+        image_buffer = create_explanation_image(explanation_text)
         
-        # LaTeX記法を読みやすい形式に変換
-        reply_text = convert_latex_to_readable(reply_text)
-        print(">>> LaTeX変換後：", reply_text[:200] + "...")
+        # 画像をアップロード
+        image_url = upload_image_to_imgur(image_buffer)
+        
+        if image_url:
+            # 画像として返信
+            line_bot_api.reply_message(
+                event.reply_token,
+                ImageSendMessage(
+                    original_content_url=image_url,
+                    preview_image_url=image_url
+                )
+            )
+            print(">>> 画像返信完了")
+        else:
+            # アップロード失敗時はテキストで返信
+            if len(explanation_text) > 5000:
+                text_reply = explanation_text[:4900] + "\n\n（続きが必要でしたら、もう一度画像を送信してください）"
+            else:
+                text_reply = explanation_text
+            
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text=text_reply)
+            )
+            print(">>> テキスト返信完了（画像アップロード失敗）")
 
     except Exception as e:
         print(">>> GPT Visionエラー：", e)
@@ -279,20 +298,13 @@ def handle_image(event):
 
 もう一度送信してください！
 """
-
-    # 返信文が長すぎる場合は分割（LINEの文字数制限対応）
-    if len(reply_text) > 5000:
-        reply_text = reply_text[:4900] + "\n\n（続きが必要でしたら、もう一度画像を送信してください）"
-
-    # LINE返信
-    try:
-        line_bot_api.reply_message(
-            event.reply_token,
-            TextSendMessage(text=reply_text)
-        )
-        print(">>> LINE返信完了")
-    except Exception as e:
-        print(">>> LINE返信エラー：", e)
+        try:
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text=reply_text)
+            )
+        except Exception as reply_error:
+            print(">>> LINE返信エラー：", reply_error)
 
 @app.route("/", methods=['GET'])
 def health_check():
