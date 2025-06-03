@@ -66,7 +66,7 @@ def handle_image(event):
 
 【指導方針】
 - 数学問題の場合：
-  * 問題の種類を特定（代数、幾何、関数、確率統計など）
+  * 問題の種類を特定
   * 解法の手順を段階的に説明
   * 使用する公式や定理を明記
   * 計算過程で注意すべきポイントを指摘
@@ -126,7 +126,7 @@ def handle_image(event):
                             "type": "image_url",
                             "image_url": {
                                 "url": f"data:image/jpeg;base64,{base64_image}",
-                                "detail": "medium"
+                                "detail": "auto"
                             }
                         }
                     ]
