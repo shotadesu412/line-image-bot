@@ -1,7 +1,7 @@
 from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
-from linebot.models import MessageEvent, ImageMessage, TextSendMessage
+from linebot.models import MessageEvent, ImageMessage, TextSendMessage, TextMessage
 import os
 import requests
 import base64
@@ -41,10 +41,7 @@ def handle_image(event):
     except Exception as e:
         print(">>> 画像取得エラー：", e)
         reply_text = "画像の取得に失敗しました。もう一度送信してください。"
-        try:
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
-        except Exception as reply_error:
-            print(">>> LINE返信エラー（画像取得失敗時）：", reply_error)
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
         return
 
     # 画像をbase64エンコード
@@ -54,10 +51,7 @@ def handle_image(event):
     except Exception as e:
         print(">>> base64エンコードエラー：", e)
         reply_text = "画像の処理に失敗しました。もう一度送信してください。"
-        try:
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
-        except Exception as reply_error:
-            print(">>> LINE返信エラー（エンコード失敗時）：", reply_error)
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
         return
 
     # GPT Vision APIで画像解析＋教育的指導
@@ -169,13 +163,10 @@ def handle_image(event):
 
 もう一度送信してください！"""
         
-        try:
-            line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(text=reply_text)
-            )
-        except Exception as reply_error:
-            print(">>> LINE返信エラー：", reply_error)
+        line_bot_api.reply_message(
+            event.reply_token,
+            TextSendMessage(text=reply_text)
+        )
 
 @handler.add(MessageEvent, message=TextMessage)
 def handle_text(event):
@@ -185,7 +176,7 @@ def handle_text(event):
     if user_message in ["使い方", "ヘルプ", "help"]:
         help_text = """【勉強サポートBotの使い方】
 
-数学や英語の問題の写真を送ってください！
+★ 数学や英語の問題の写真を送ってください！
 
 (1) 問題を撮影
 ・問題全体が写るように
@@ -200,7 +191,9 @@ def handle_text(event):
 ・重要なポイントを解説
 ・自分で解けるようにサポート
 
-
+【対応科目】
+・数学（中学〜高校2年レベル）
+・英語（文法・読解・語彙など）
 """
         
         line_bot_api.reply_message(
