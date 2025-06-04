@@ -102,7 +102,7 @@ def handle_image(event):
 """
 
         gpt_response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-4o",
             messages=[
                 {
                     "role": "user",
@@ -121,7 +121,7 @@ def handle_image(event):
                     ]
                 }
             ],
-            max_tokens=1000,
+            max_tokens=1500,
             temperature=0.7
         )
         
