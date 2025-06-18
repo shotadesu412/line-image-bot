@@ -266,7 +266,7 @@ def handle_image(event):
 """
 
         gpt_response = client.chat.completions.create(
-            model="gpt-4o",
+            model="gpt-4.1",
             messages=[
                 {
                     "role": "user",
